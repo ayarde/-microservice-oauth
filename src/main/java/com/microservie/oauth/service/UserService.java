@@ -1,6 +1,7 @@
 package com.microservie.oauth.service;
 
 import com.microservie.oauth.client.UserFeignClient;
+import feign.FeignException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,27 +24,33 @@ public class UserService implements IUser, UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        com.microservice.common.user.modal.entity.User user = client.findByUsername(username);
+        try {
+            com.microservice.common.user.modal.entity.User user = client.findByUsername(username);
 
-        if (user == null) {
+            List<GrantedAuthority> authorities = user.getRoles()
+                    .stream()
+                    .map(role -> new SimpleGrantedAuthority(role.getName()))
+                    .peek(authority -> log.info("Role:" + authority.getAuthority()))
+                    .collect(Collectors.toList());
+
+            log.info("Authenticated user" + username);
+
+            return new User(user.getUsername(), user.getPassword(), user.getEnable(), true,
+                    true, true, authorities);
+        } catch (FeignException feignException){
             log.error("Error during login, user '" + username + "' not exist in system");
             throw new UsernameNotFoundException("Error during login, user '" + username + "' not exist in system");
         }
-
-        List<GrantedAuthority> authorities = user.getRoles()
-                .stream()
-                .map(role -> new SimpleGrantedAuthority(role.getName()))
-                .peek(authority -> log.info("Role:" + authority.getAuthority()))
-                .collect(Collectors.toList());
-
-        log.info("Authenticated user" + username);
-
-        return new User(user.getUsername(), user.getPassword(), user.getEnable(), true,
-                true, true, authorities);
     }
 
     @Override
     public com.microservice.common.user.modal.entity.User findByUsername(String userName) {
         return client.findByUsername(userName);
     }
+
+    @Override
+    public com.microservice.common.user.modal.entity.User update(com.microservice.common.user.modal.entity.User user, Long id) {
+        return client.update(user,id);
+    }
+
 }
